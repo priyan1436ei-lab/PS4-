@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aether-ps4"
+version = "1.0.0"
+authors = [
+  { name="PRIYAN-A-1" },
+]
+description = "AetherPS4 - Modern PlayStation 4 Emulator Core"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["aether_ps4*"]
+
+[project.urls]
+"Homepage" = "https://github.com/PRIYAN-A-1/aether-ps4"

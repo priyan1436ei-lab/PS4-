@@ -1,0 +1,139 @@
+Metadata-Version: 2.4
+Name: aether-ps4
+Version: 1.0.0
+Summary: AetherPS4 - Modern PlayStation 4 Emulator Core
+Author: PRIYAN-A-1
+License: MIT
+Project-URL: Homepage, https://github.com/PRIYAN-A-1/aether-ps4
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Dynamic: license-file
+
+# AetherPS4 - Modern PlayStation 4 Emulator Core
+
+[![Author: PRIYAN-A-1](https://img.shields.io/badge/Author-PRIYAN--A--1-orange.svg)](https://github.com/PRIYAN-A-1)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![C++20](https://img.shields.io/badge/C%2B%2B-20-purple.svg)](https://isocpp.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Tests: Passing](https://img.shields.io/badge/Tests-8%20Passing-brightgreen.svg)]()
+
+**AetherPS4** is a modern, modular, high-performance architecture and emulation core for the **Sony PlayStation 4 (PS4)**, designed and developed by **PRIYAN-A-1**. Engineered following the architectural reverse-engineering principles of 8th-generation console systems, AetherPS4 implements the complete foundational pipeline required for modern PS4 emulation.
+
+---
+
+## Architectural Breakdown
+
+```
++-----------------------------------------------------------------------------------+
+|                                  AetherPS4 Core                                   |
++-----------------------------------------------------------------------------------+
+  |                                 |                                 |
+  v                                 v                                 v
++------------------+     +--------------------+     +-------------------------------+
+| Binary Loader    |     | Memory Subsystem   |     | Orbis OS Kernel HLE           |
+|------------------|     |--------------------|     |-------------------------------|
+| - SELF Decryptor |     | - 40-bit VM Space  |     | - POSIX Thread Management     |
+| - ELF64 / OELF   |     | - 16KB Guest Pages |     | - Mutex, Cond, Sema, Flags    |
+| - NID Resolution |     | - GDDR5 DMEM Pool  |     | - Sysmodule Dynamic Loader    |
+| - Symbol Relocs  |     | - Page Translation |     | - Direct Memory Syscalls      |
++------------------+     +--------------------+     +-------------------------------+
+  |                                 |                                 |
+  +---------------------------------+---------------------------------+
+                                    |
+                                    v
++-----------------------------------------------------------------------------------+
+|                        Liverpool AMD GCN GPU Subsystem                            |
+|-----------------------------------------------------------------------------------|
+| - PM4 Command Processor (Type-0, Type-2, Type-3 packets)                          |
+| - GFX, CCB, and Async Compute (ACB) Ring Buffers                                  |
+| - GCN Microcode ISA Decoder (SOPP, SOP1, SOP2, VOP1, VOP2, VOP3, EXP)            |
+| - 2D Morton Z-Order Micro-Tile Texture Swizzler & Deswizzler                      |
++-----------------------------------------------------------------------------------+
+```
+
+### 1. Direct x86-64 Execution & ABI Bridge
+Because the PlayStation 4's AMD Jaguar CPU is a native 64-bit x86-64 processor, modern emulators avoid the massive overhead of CPU emulation/interpretation by utilizing **Direct Host Execution**:
+- Guest user-space code runs natively on the host x86-64 CPU.
+- An ABI thunk layer translates between the PS4's **System V AMD64 ABI** (registers: `RDI, RSI, RDX, RCX, R8, R9`) and Windows **Microsoft x64 ABI** (`RCX, RDX, R8, R9`).
+- Symbol tables are patched via dynamic linking: Sony Name Identifiers (**NIDs**) are resolved against high-level emulation (HLE) function trampolines.
+
+### 2. Unified GDDR5 Memory & 16KB Pages
+- **Address Space**: 40-bit virtual user address space (1 TB capacity) mapped above `0x200000000` (8 GB).
+- **Guest Page Size**: 16 KB (`1 << 14` bytes) matching FreeBSD Orbis OS specifications.
+- **Direct Memory (DMEM)**: Emulates `sceKernelAllocateDirectMemory` and `sceKernelMapDirectMemory`, providing unified memory access shared between CPU threads and GPU shaders.
+
+### 3. Liverpool GPU & PM4 Command Processor
+- Decodes packet streams submitted via `sceGnmSubmitCommandBuffers`:
+  - **Type-3 Packets**: `SET_CONTEXT_REG` (0x69), `SET_SH_REG` (0x76), `DRAW_INDEX_AUTO` (0x2D), `DRAW_INDEX_2` (0x27), `NUM_INSTANCES` (0x2F), `INDEX_TYPE` (0x2A), `NOP` (0x10).
+  - **Shader Registers**: Tracks vertex, pixel, and compute shader base addresses (`SPI_SHADER_PGM_LO/HI`).
+
+### 4. AMD GCN Shader Instruction Decoder
+- Parses raw GFX7/Sea Islands binary microcode:
+  - **SOPP**: Scalar ALU with 16-bit signed immediate (`s_waitcnt`, `s_endpgm`, `s_branch`, `s_cbranch_scc0`).
+  - **SOP2**: Dual-input scalar ALU (`s_add_u32`, `s_sub_u32`, `s_and_b32`, `s_lshl_b32`).
+  - **VOP1 & VOP2**: Vector ALU arithmetic (`v_mov_b32`, `v_add_f32`, `v_mul_f32`, `v_sqrt_f32`).
+  - **EXP**: Export instructions targeting Multiple Render Targets (MRT0..7) and Vertex Positions (POS0..3).
+
+### 5. Morton 2D Texture Swizzling
+- PS4 textures are stored in 8x8 microtiles with bit-interleaved Morton Z-order curve layout to maximize hardware cache coherence.
+- AetherPS4 provides bit-exact swizzling and deswizzling between linear memory and GCN tiled memory.
+
+---
+
+## Getting Started
+
+### Prerequisites
+- Python 3.10+ (Built-in standard library; zero external dependencies required!)
+- Optional: C++20 compiler (Clang / GCC / MSVC) for `cpp_core`.
+
+### Running the Live Emulation Demo
+Run the comprehensive subsystem test and live execution pipeline:
+```bash
+python main.py
+```
+
+### Running Unit Tests
+AetherPS4 includes an 8-subsystem verification suite:
+```bash
+python -m unittest discover tests
+```
+
+### Command Line Interface (CLI)
+```bash
+# Inspect PlayStation param.sfo metadata
+python -m aether_ps4.cli --sfo /path/to/param.sfo
+
+# Inspect PS4 ELF / SELF executable headers and segments
+python -m aether_ps4.cli --elf /path/to/eboot.bin
+```
+
+---
+
+## Directory Structure
+
+```
+├── aether_ps4/                  # Core Python Emulation Engine
+│   ├── common/                  # Architectural constants, types, logger, NID hashing
+│   ├── loader/                  # SELF / ELF64 parser, segment mapper, NID resolver
+│   ├── memory/                  # 40-bit VM space, 16KB page table, GDDR5 DMEM pool
+│   ├── kernel/                  # Orbis OS (FreeBSD) HLE kernel & synchronization
+│   ├── gpu/                     # Liverpool PM4 processor, GCN ISA disasm, Morton swizzler
+│   ├── file_format/             # param.sfo & PKG/PFS parsers
+│   ├── core.py                  # Master emulator orchestrator
+│   └── cli.py                   # Interactive CLI
+├── cpp_core/                    # Modern C++20 Reference Implementation
+│   ├── include/aether/          # C++20 Headers (elf.h, address_space.h, pm4_processor.h)
+│   ├── src/main.cpp             # Native C++ runner
+│   └── CMakeLists.txt           # Build script
+├── tests/                       # Unit test suite
+├── main.py                      # Root launcher
+└── README.md                    # Documentation
+```
+
+---
+
+## License & Authorship
+Copyright (c) 2026 **PRIYAN-A-1**.
+Licensed under the [MIT License](LICENSE). Designed and authored by PRIYAN-A-1.
+
